@@ -529,12 +529,7 @@ with tf.Session(config=config) as session: #tf.Session(config=tf.ConfigProto(gpu
             frame_errors += (errors.sum(0) > 0).sum()
             FE = frame_errors
             
-            # update block error count
-            if errors.sum()>0:
-                count += 1
-            blk_errors += count 
             
-
         # summarize this SNR:
         print("SNR: " + str(SNR))
         print("frame count: " + str(frame_count))
