@@ -362,7 +362,7 @@ with tf.Session(config=config) as session: #tf.Session(config=tf.ConfigProto(gpu
     FERs = []
 
     print("\nBuilding the decoder graph...")
-    #belief_propagation = belief_propagation_op(soft_input=tf_train_dataset, labels=tf_train_labels)
+    
     belief_propagation = belief_propagation_op(soft_input=tf_train_dataset, labels=tf_train_labels)
     if TRAINING:
         training_loss = belief_propagation[5]#tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=belief_propagation[1], labels=tf_train_labels))
