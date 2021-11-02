@@ -333,9 +333,8 @@ if MIN_SUM:
         # decoder.B_cv = tf.Variable(tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0))#tf.Variable(1.0 + tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0))#tf.Variable(1.0 + tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0/num_edges))
         # decoder.B_vc = tf.Variable(tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0))#tf.Variable(1.0 + tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0))#tf.Variable(1.0 + tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0/num_edges))
         decoder.B_cv = tf.Variable(tf.truncated_normal([num_iterations],dtype=tf.float32,stddev=1.0))
-        #decoder.B_vc = tf.Variable(tf.truncated_normal([num_iterations], dtype=tf.float32, stddev=1.0))
-        decoder.beta_cv = tf.Variable(tf.truncated_normal([num_iterations],dtype=tf.float32,stddev=1.0))
-
+        decoder.B_vc = tf.Variable(tf.truncated_normal([num_iterations], dtype=tf.float32, stddev=1.0))
+        
 if decoder.relaxed:
     decoder.relaxation_factors = tf.Variable(0.0,dtype=tf.float32)
     R = tf.sigmoid(decoder.relaxation_factors)
