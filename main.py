@@ -188,9 +188,8 @@ def compute_cv(vc, iteration):
             #normalized = tf.nn.softplus(decoder.B_cv[iteration])   # add normalized softplus---> log(1+exp(x))
             #mins = tf.multiply(mins, tf.tile(tf.reshape(normalized, [-1, 1]), [1, batch_size]))
             normalized = tf.nn.softplus(decoder.B_cv[iteration])   # add normalized softplus---> log(1+exp(x))
-            bias =  tf.nn.softplus(decoder.beta_cv[iteration]) 
-            mins = tf.nn.relu(tf.multiply(mins, tf.tile(tf.reshape(normalized, [-1, 1]), [1, batch_size])) 
-                                    - tf.tile(tf.reshape(bias, [-1, 1]), [1, batch_size]), name="ReLU")
+            mins = tf.multiply(mins, tf.tile(tf.reshape(normalized, [-1, 1]), [1, batch_size]))
+
         cv = prods * mins
 
     new_order = np.zeros(num_edges).astype(np.int)
