@@ -543,6 +543,7 @@ with tf.Session(config=config) as session: #tf.Session(config=tf.ConfigProto(gpu
         FER = np.float(frame_errors) / np.float(frame_count)
         FERs.append(FER)
         print("FER: " + str(FER))
+        print("")
         
 
     # print summary
