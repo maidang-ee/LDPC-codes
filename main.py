@@ -1,8 +1,7 @@
 # Belief propagation using TensorFlow
 # Run as follows:
-# python main.py 0 0 5 1 100 10000000000000000 10 LDPC_576_432.alist LDPC_576_432.gmat laskdjhf 0/1 100 SNNMS/NNMS
+# python main.py 0 0 5 1 100 10000000000000000 10 LDPC_576_432.alist LDPC_576_432.gmat laskdjhf 0/1 100 NSCMS/SNNMS
 import numpy as np
-# import tensorflow as tf
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior() 
 import sys
@@ -16,7 +15,6 @@ DEBUG = False
 TRAINING = False
 SUM_PRODUCT = False
 MIN_SUM = not SUM_PRODUCT
-#ALL_ZEROS_CODEWORD_TRAINING = False
 ALL_ZEROS_CODEWORD_TRAINING = False
 ALL_ZEROS_CODEWORD_TESTING = False
 
@@ -52,8 +50,8 @@ if NO_SIGMA_SCALING_TEST:
     print("Not scaling test input by 2/sigma")
 else:
     print("Scaling test input by 2/sigma")
-# python main.py 0 0 5 1 100 10_000_000_000_000_000 5 LDPC_576_432.alist LDPC_576_432.gmat laskdjhf 1 100 SNNMS
-#                1 2 3 4   5        6               7      8                      9            10   11 12  13
+# python main.py 0 0 5 1 100 10_000_000_000_000_000 5 LDPC_576_432.alist LDPC_576_432.gmat laskdjhf 1 100 NSCMS
+#                1 2 3 4   5        6               7      8                      9            10  11 12  13
 seed = int(sys.argv[1])
 np.random.seed(seed)
 snr_lo = float(sys.argv[2])
@@ -99,7 +97,7 @@ tf_train_labels = tf.placeholder(tf.float32, shape=(n,batch_size))#tf.placeholde
 #### decoder functions ####
 # compute messages from variable nodes to check nodes
 def compute_vc(cv, iteration, soft_input):
-    weighted_soft_input = soft_input    #maybe Wv2c?
+    weighted_soft_input = soft_input    
 
     edges = []
     for i in range(0, n):
@@ -174,20 +172,25 @@ def compute_cv(vc, iteration):
     if MIN_SUM:
         prods = tf.stack(prod_list)
         mins = tf.stack(min_list)
-        if decoder.decoder_type == "SNNMS": 
-            # offsets = tf.nn.softplus(decoder.B_cv[iteration]) #   normalized FNOMS
+        if decoder.decoder_type == "NSCMS": 
+            # offsets = tf.nn.softplus(decoder.B_cv[iteration]) #   normalized 
+            #bias = tf.nn.softplus(decoder.beta_cv[iteration])  #   bias 
             # mins = tf.nn.relu(mins - tf.tile(tf.reshape(offsets,[-1,1]),[1,batch_size]))
             # normalized = tf.nn.softplus(decoder.B_cv[iteration])  # add normalized
             normalized = tf.nn.softplus(decoder.B_cv[iteration])   # add normalized softplus---> log(1+exp(x))
             bias =  tf.nn.softplus(decoder.beta_cv[iteration]) 
             mins = tf.nn.relu(tf.multiply(mins, tf.tile(tf.reshape(normalized, [-1, 1]), [1, batch_size])) 
                                     - tf.tile(tf.reshape(bias, [-1, 1]), [1, batch_size]), name="ReLU")
-        elif decoder.decoder_type == "NNMS": 
-            # offsets = tf.nn.softplus(decoder.B_cv[iteration]) 
+        elif decoder.decoder_type == "SNNMS": 
+            # offsets = tf.nn.softplus(decoder.B_cv[iteration]) #   normalized FNOMS
             # mins = tf.nn.relu(mins - tf.tile(tf.reshape(offsets,[-1,1]),[1,batch_size]))
-            # normalized = tf.nn.softplus(decoder.B_cv[iteration])  
-            normalized = tf.nn.softplus(decoder.B_cv[iteration])   
-            mins = tf.multiply(mins, tf.tile(tf.reshape(normalized, [-1, 1]), [1, batch_size]))
+            # normalized = tf.nn.softplus(decoder.B_cv[iteration])  # add normalized
+            #normalized = tf.nn.softplus(decoder.B_cv[iteration])   # add normalized softplus---> log(1+exp(x))
+            #mins = tf.multiply(mins, tf.tile(tf.reshape(normalized, [-1, 1]), [1, batch_size]))
+            normalized = tf.nn.softplus(decoder.B_cv[iteration])   # add normalized softplus---> log(1+exp(x))
+            bias =  tf.nn.softplus(decoder.beta_cv[iteration]) 
+            mins = tf.nn.relu(tf.multiply(mins, tf.tile(tf.reshape(normalized, [-1, 1]), [1, batch_size])) 
+                                    - tf.tile(tf.reshape(bias, [-1, 1]), [1, batch_size]), name="ReLU")
         cv = prods * mins
 
     new_order = np.zeros(num_edges).astype(np.int)
@@ -201,7 +204,6 @@ def compute_cv(vc, iteration):
     return cv
 
 # combine messages to get posterior LLRs
-
 
 def marginalize(soft_input, iteration, cv):
     weighted_soft_input = soft_input
@@ -221,9 +223,13 @@ def marginalize(soft_input, iteration, cv):
     soft_output = weighted_soft_input + soft_output
     return soft_output
 
+# condition to stop running
+
 def continue_condition(soft_input, soft_output, iteration, cv, m_t, loss, labels):
     condition = (iteration < num_iterations)
     return condition
+
+# BP computation
 
 def belief_propagation_iteration(soft_input, soft_output, iteration, cv, m_t, loss, labels):
     # compute vc
@@ -243,21 +249,26 @@ def belief_propagation_iteration(soft_input, soft_output, iteration, cv, m_t, lo
     soft_output = marginalize(soft_input, iteration, cv)
     iteration += 1
     
+    # compare the sign of two VNs  in 2 consecutive iterations 
     sign = tf.math.sign(tf.multiply(soft_input, soft_output), name="sign") # 0, 1 or -1
-    soft_output_supressed =  tf.multiply(soft_output, tf.nn.relu(sign), name="supress")
-    soft_output_supressed += 0.01
-    soft_output_supressed /= (1+0.01)
+    soft_output_suppressed =  tf.multiply(soft_output, tf.nn.relu(sign), name="suppress")
+    
+    # to avoid value '0' of soft_output_suppressed
+    soft_output_suppressed += 0.01
+    soft_output_suppressed /= (1+0.01)
     
     
     # L = 0.5
     print("L = " + str(L))
-    CE_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=-soft_output_supressed, labels=labels)) / num_iterations
-    MSE_loss = tf.reduce_mean(tf.square(soft_output_supressed - labels)) / num_iterations
+    CE_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=-soft_output_suppressed, labels=labels)) / num_iterations
+    MSE_loss = tf.reduce_mean(tf.square(soft_output_suppressed - labels)) / num_iterations
     new_loss = L * CE_loss + (1 - L) * MSE_loss
+    # weigh loss value (i.e., only some losses for last iterations are mattered)
     loss = loss + new_loss * tf.cast(iteration, dtype=tf.float32) / (num_iterations*(num_iterations+1.0)/2.0) #
-    return soft_input, soft_output_supressed, iteration, cv, m_t, loss, labels
+    return soft_input, soft_output_suppressed, iteration, cv, m_t, loss, labels
 
 # builds a belief propagation TF graph
+
 def belief_propagation_op(soft_input, labels):
     
     return tf.while_loop(
@@ -273,8 +284,9 @@ def belief_propagation_op(soft_input, labels):
             labels
         ]
         )
+'''
 
-# for voting in testing process
+# When applying 'voting' in testing process
 def belief_propagation_op_test(soft_input, labels):
     soft_output = soft_input
     it = tf.constant(0, dtype=tf.int32)
@@ -287,9 +299,10 @@ def belief_propagation_op_test(soft_input, labels):
         sotf_input, soft_output, it, cv, m_t, loss, _ =  belief_propagation_iteration(
             soft_input, soft_output, it, cv, m_t, loss, labels
         )
-        if iteration >= num_iterations-3:
+        if iteration >= num_iterations - 4:
             outputs.append(soft_output)
     return outputs
+'''
 
 #### end decoder functions ####
 global_step = tf.Variable(0, trainable=False)
@@ -309,20 +322,20 @@ if SUM_PRODUCT:
 
 if MIN_SUM:
     
+    if decoder.decoder_type == "NSCMS":
+        # NSCMS
+        # decoder.B_cv = tf.Variable(tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0))#tf.Variable(1.0 + tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0))#tf.Variable(1.0 + tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0/num_edges))
+        # decoder.beta_cv = tf.Variable(tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0))#tf.Variable(1.0 + tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0))#tf.Variable(1.0 + tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0/num_edges))
+        decoder.B_cv = tf.Variable(tf.truncated_normal([num_iterations],dtype=tf.float32,stddev=1.0))
+        decoder.beta_cv = tf.Variable(tf.truncated_normal([num_iterations],dtype=tf.float32,stddev=1.0))
+
     if decoder.decoder_type == "SNNMS":
         # SNNMS
         # decoder.B_cv = tf.Variable(tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0))#tf.Variable(1.0 + tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0))#tf.Variable(1.0 + tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0/num_edges))
         # decoder.B_vc = tf.Variable(tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0))#tf.Variable(1.0 + tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0))#tf.Variable(1.0 + tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0/num_edges))
         decoder.B_cv = tf.Variable(tf.truncated_normal([num_iterations],dtype=tf.float32,stddev=1.0))
+        #decoder.B_vc = tf.Variable(tf.truncated_normal([num_iterations], dtype=tf.float32, stddev=1.0))
         decoder.beta_cv = tf.Variable(tf.truncated_normal([num_iterations],dtype=tf.float32,stddev=1.0))
-        #decoder.B_vc = tf.Variable(tf.truncated_normal([num_iterations], dtype=tf.float32, stddev=1.0))
-
-    if decoder.decoder_type == "NNMS":
-        # NNMS
-        decoder.B_cv = tf.Variable(tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0))#tf.Variable(1.0 + tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0))#tf.Variable(1.0 + tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0/num_edges))
-        decoder.B_vc = tf.Variable(tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0))#tf.Variable(1.0 + tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0))#tf.Variable(1.0 + tf.truncated_normal([num_iterations, num_edges],dtype=tf.float32,stddev=1.0/num_edges))
-        #decoder.B_cv = tf.Variable(tf.truncated_normal([num_iterations],dtype=tf.float32,stddev=1.0))
-        #decoder.B_vc = tf.Variable(tf.truncated_normal([num_iterations], dtype=tf.float32, stddev=1.0))
 
 if decoder.relaxed:
     decoder.relaxation_factors = tf.Variable(0.0,dtype=tf.float32)
@@ -351,6 +364,7 @@ with tf.Session(config=config) as session: #tf.Session(config=tf.ConfigProto(gpu
     FERs = []
 
     print("\nBuilding the decoder graph...")
+    #belief_propagation = belief_propagation_op(soft_input=tf_train_dataset, labels=tf_train_labels)
     belief_propagation = belief_propagation_op(soft_input=tf_train_dataset, labels=tf_train_labels)
     if TRAINING:
         training_loss = belief_propagation[5]#tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=belief_propagation[1], labels=tf_train_labels))
@@ -373,7 +387,7 @@ with tf.Session(config=config) as session: #tf.Session(config=tf.ConfigProto(gpu
         for j in range(0,n):
             covariance_matrix[i,j] = eta**np.abs(i-j)
 
-    session.run(init)
+    session.run(init)       #start learning parameters process
     
     if TRAINING:
         tic = time()
@@ -444,12 +458,17 @@ with tf.Session(config=config) as session: #tf.Session(config=tf.ConfigProto(gpu
     print("***********************")
     print("Testing decoder...")
     print("***********************")
-    belief_propagation_test = belief_propagation_op_test(soft_input=tf_train_dataset, labels=tf_train_labels)
+    
+    #Only when applying 'Voting'
+    #belief_propagation_test = belief_propagation_op_test(soft_input=tf_train_dataset, labels=tf_train_labels)
+    
     for SNR in SNRs:
         # simulate this SNR
         sigma = np.sqrt(1. / (2 * (np.float(k)/np.float(n)) * 10**(SNR/10)))
         frame_count = 0
         bit_errors = 0
+        blk_errors = 0
+        count = 0
         frame_errors = 0
         frame_errors_with_HDD = 0
         symbol_errors = 0
@@ -481,6 +500,9 @@ with tf.Session(config=config) as session: #tf.Session(config=tf.ConfigProto(gpu
             else:
                 soft_input = 2.0*channel_information/(sigma*sigma)
             
+            #print("Here is the input: ")
+            #print(soft_input)
+            
             # soft input = channel LLR
             
             # run belief propagation
@@ -488,22 +510,32 @@ with tf.Session(config=config) as session: #tf.Session(config=tf.ConfigProto(gpu
             #data feed to model/ input = batch_data; output = codewords
             feed_dict = {tf_train_dataset : batch_data, tf_train_labels : codewords}
             #
-            #soft_outputs = session.run([belief_propagation], feed_dict=feed_dict)
-            soft_outputs = session.run([belief_propagation_test], feed_dict=feed_dict)  # soft_outputs of ALL iterations 
+            soft_outputs = session.run([belief_propagation], feed_dict=feed_dict)
+            #soft_outputs = session.run([belief_propagation_test], feed_dict=feed_dict)  # soft_outputs of ALL iterations/ only when applying 'voting'
             
             #print(soft_outputs)
             
-            #soft_output = np.array(soft_outputs[0][1])
-            #recovered_codewords = (soft_output < 0).astype(int)
-
-            recovered_codewords = [(np.array(soft_output) < 0).astype(int) for soft_output in soft_outputs]
-            recovered_codewords = (np.mean(recovered_codewords, axis=0) < 0.5).astype(int)
+            # Use when running w/o 'voting'
+            soft_output = np.array(soft_outputs[0][1])
+            recovered_codewords = (soft_output < 0).astype(int)
+            
+            #print("Here is the output: ")
+            #print(soft_output)
+            
+            #recovered_codewords = [(np.array(soft_output) < 0).astype(int) for soft_output in soft_outputs]
+            #recovered_codewords = (np.mean(recovered_codewords, axis=0) < 0.5).astype(int)    #Only when applying 'voting'
+            
             # update bit error count and frame error count
             errors = codewords != recovered_codewords
             bit_errors += errors.sum()
             frame_errors += (errors.sum(0) > 0).sum()
-
             FE = frame_errors
+            
+            # update block error count
+            if errors.sum()>0:
+                count += 1
+            blk_errors += count 
+            
 
         # summarize this SNR:
         print("SNR: " + str(SNR))
@@ -518,11 +550,10 @@ with tf.Session(config=config) as session: #tf.Session(config=tf.ConfigProto(gpu
         FER = np.float(frame_errors) / np.float(frame_count)
         FERs.append(FER)
         print("FER: " + str(FER))
-        print("")
+        
 
     # print summary
     print("BERs:")
     print(BERs)
     print("FERs:")
     print(FERs)    
-
